@@ -12,15 +12,21 @@ try:  # pragma: no cover - exercised when running inside ComfyUI.
 
     from comfy_api.latest import ComfyExtension, io
 
+    from .modal_builder import ModalDeploymentNode, RemoteInputNode, RemoteOutputNode
     from .remote_node import RemoteAPINode
 
     class ComfyRemoteExtension(ComfyExtension):
-        """Registers the remote REST bridge node with ComfyUI."""
+        """Registers the remote REST bridge node suite with ComfyUI."""
 
         @override
         async def get_node_list(self) -> list[Type[io.ComfyNode]]:
             logger.debug("Registering ComfyUI Remote nodes")
-            return [RemoteAPINode]
+            return [
+                ModalDeploymentNode,
+                RemoteInputNode,
+                RemoteOutputNode,
+                RemoteAPINode,
+            ]
 
 
     async def comfy_entrypoint() -> ComfyRemoteExtension:

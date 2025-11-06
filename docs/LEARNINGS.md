@@ -4,3 +4,5 @@
 - Established a JSON protocol that pickles inputs into base64 strings alongside their inferred Comfy types, enabling arbitrary payloads to be shipped to remote workers.
 - Added a polling loop that understands `status`, `progress`, and `poll_url` fields to surface remote progress in the ComfyUI progress bar via the latest API helpers.
 - Captured the new helper utilities in `comfy_remote.protocol` to keep serialization logic testable; see `tests/test_protocol.py` for coverage of edge cases.
+- Introduced Remote Input/Output nodes that act as explicit ingress/egress points for remote payloads, complete with injection helpers for the Modal build pipeline.
+- Added a Modal Deployment node that scaffolds a Modal Comfy worker project, optionally shells out to `modal deploy`, and returns the service URL so the Remote API node can target the deployed workflow.
