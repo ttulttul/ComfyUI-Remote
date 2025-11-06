@@ -3,11 +3,8 @@ import tempfile
 from pathlib import Path
 import unittest
 
-from comfy_remote.modal_builder import (
-    ModalDeploymentNode,
-    RemoteInputNode,
-    RemoteOutputNode,
-)
+from comfy_remote.modal_builder import ModalDeploymentNode
+from comfy_remote.remote_io import RemoteInputNode, RemoteOutputNode
 
 
 class RemoteNodesTest(unittest.TestCase):
@@ -46,22 +43,52 @@ class ModalDeploymentTest(unittest.TestCase):
 
             project = ModalDeploymentNode._prepare_modal_project(
                 workflow_file=workflow_path,
-                repository_url="https://example.com/repo.git",
                 app_name="sample-app",
                 working_directory=tmpdir,
+                pip_packages=["numpy"],
+                system_packages=["libgl1"],
+                gpu_type="A10G",
             )
 
             self.assertTrue(project.prompt.exists())
-            self.assertTrue(project.snapshot.exists())
             self.assertTrue(project.workflow.exists())
+            self.assertTrue(project.config.exists())
 
-            snapshot = json.loads(project.snapshot.read_text())
-            self.assertIn("repositories", snapshot)
-            self.assertEqual(snapshot["repositories"][0]["url"], "https://example.com/repo.git")
+            config = json.loads(project.config.read_text())
+            self.assertEqual(config["app_name"], "sample-app")
+            self.assertEqual(config["extra_pip_packages"], ["numpy"])
+            self.assertEqual(config["extra_system_packages"], ["libgl1"])
+            self.assertEqual(config["gpu_type"], "A10G")
 
             workflow_source = project.workflow.read_text()
             self.assertIn("modal.App", workflow_source)
             self.assertIn("PROMPT_PATH", workflow_source)
+            self.assertIn('image = image.pip_install("fastapi", "xformers")', workflow_source)
+            self.assertIn('pip install --no-cache-dir --force-reinstall --index-url https://download.pytorch.org/whl/cu121 torch==2.3.0 torchvision==0.18.0 torchaudio==2.3.0', workflow_source)
+            self.assertIn('image = image.env({"PYTHONPATH": "/workspace/ComfyUI"})', workflow_source)
+            self.assertIn('"min_containers": 1', workflow_source)
+            self.assertIn('modal.fastapi_endpoint', workflow_source)
+            self.assertIn("EXTRA_PIP_PACKAGES = ['numpy']", workflow_source)
+            self.assertIn("EXTRA_SYSTEM_PACKAGES = ['libgl1']", workflow_source)
+            self.assertIn("GPU_TYPE = 'A10G'", workflow_source)
+
+    def test_prepare_modal_project_defaults_to_h100_gpu(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmpdir_path = Path(tmpdir)
+            workflow_path = tmpdir_path / "workflow.json"
+            workflow_path.write_text(json.dumps({"nodes": []}))
+
+            project = ModalDeploymentNode._prepare_modal_project(
+                workflow_file=workflow_path,
+                app_name="default-gpu",
+                working_directory=tmpdir,
+                pip_packages=[],
+                system_packages=[],
+                gpu_type=None,
+            )
+
+            config = json.loads(project.config.read_text())
+            self.assertEqual(config["gpu_type"], "H100")
 
 
 if __name__ == "__main__":

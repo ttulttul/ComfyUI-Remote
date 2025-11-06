@@ -18,10 +18,10 @@ try:  # ComfyUI runtime always has torch, but guard for tests.
 except ModuleNotFoundError:  # pragma: no cover - only triggered in limited envs.
     torch = None  # type: ignore
 
-from comfy_api.latest import ComfyAPI, io
 from comfy_api.latest._io import AutogrowDynamic
 from server import PromptServer
 
+from ._comfy import ComfyAPI, get_execution_interface, io
 from .protocol import (
     SerializedValue,
     deserialize_value,
@@ -154,7 +154,8 @@ class RemoteAPINode(io.ComfyNode):
             raise RemoteAPIError(f"Network error contacting remote API: {exc}") from exc
 
         logger.info("Remote execution completed for node %s", cls.hidden.unique_id)
-        await api.execution.set_progress(1.0, 1.0, node_id=cls.hidden.unique_id)
+        execution_api = get_execution_interface(api)
+        await execution_api.set_progress(1.0, 1.0, node_id=cls.hidden.unique_id)
         return io.NodeOutput(result)
 
     @classmethod
@@ -255,8 +256,9 @@ class RemoteAPINode(io.ComfyNode):
         progress_pair = extract_progress(response)
         if progress_pair and progress_pair != previous:
             value, total = progress_pair
+            execution_api = get_execution_interface(api)
             cls._schedule_progress_update(
-                api.execution.set_progress(
+                execution_api.set_progress(
                     value=value,
                     max_value=total,
                     node_id=cls.hidden.unique_id,

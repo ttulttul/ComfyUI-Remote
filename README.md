@@ -15,7 +15,7 @@ ComfyUI Remote is a collection of custom nodes that make it easier to run ComfyU
 
 1. Add `Remote Input` nodes where you expect data from the remote request.
 2. Add `Remote Output` nodes for the values you want to return.
-3. Export the workflow JSON and run the `Modal Deployment` node, pointing it at the JSON file. This generates a Modal project scaffold (prompt, snapshot, workflow.py) and, when `deploy=True`, calls `modal deploy` to produce a public endpoint URL.
+3. Export the workflow JSON and run the `Modal Deployment` node, pointing it at the JSON file. This generates a Modal project scaffold (`prompt.json`, `modal_config.json`, `workflow.py`) and, when `deploy=True`, calls `modal deploy` to produce a public endpoint URL.
 4. Feed the returned URL into the `Remote API` node. Connect its inputs to the data you want to send to the remote workflow and its output to the downstream nodes in ComfyUI.
 
 Once connected, execution looks like:
@@ -28,10 +28,10 @@ Progress coming back from the remote service is forwarded to ComfyUI's progress 
 
 ## Modal Prerequisites
 
-- The Modal CLI (`modal`) and `uv` must be installed locally.
-- Authenticate Modal (`modal token new`) and ensure you have permission to deploy apps.
-- The deployment template expects Tolga's [modal-comfy-worker](https://github.com/tolgahanuzun/modal-comfy-worker) repository. You can override the repo URL via the node input if you maintain a fork.
-- Populate `snapshot.json` with any additional repositories or pip requirements your workflow needs; the node generates a minimal stub that references the worker repository.
+- Install the Modal CLI (`pip install modal-client`) and authenticate (`modal token new`).
+- The `Modal Deployment` node now emits a self-contained Modal app that clones the upstream [ComfyUI](https://github.com/comfyanonymous/ComfyUI) repository inside the container—no external worker template required.
+- Optional pip dependencies and Debian packages can be declared through the node inputs; they are recorded in `modal_config.json` alongside the generated `workflow.py`.
+- GPU builds automatically install CUDA-enabled PyTorch wheels (`torch==2.3.0`, `torchvision==0.18.0`, `torchaudio==2.3.0` from the cu121 index) with `--force-reinstall`, add `xformers`, and export `/workspace/ComfyUI` on `PYTHONPATH` so ComfyUI’s `utils` package resolves correctly. Leaving the `Modal GPU` input blank defaults to an `H100`; set it explicitly if you need a different accelerator.
 
 ## Remote Protocol
 
