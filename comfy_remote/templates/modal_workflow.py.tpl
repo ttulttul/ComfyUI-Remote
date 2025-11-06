@@ -25,6 +25,13 @@ EXTRA_PIP_PACKAGES = $PIP_PACKAGES
 EXTRA_SYSTEM_PACKAGES = $SYSTEM_PACKAGES
 GPU_TYPE = $GPU_LITERAL
 
+TORCH_VERSION = "2.3.0"
+TORCHVISION_VERSION = "0.18.0"
+TORCHAUDIO_VERSION = "2.3.0"
+CUDA_WHEEL_INDEX = "https://download.pytorch.org/whl/cu121"
+CPU_WHEEL_INDEX = "https://download.pytorch.org/whl/cpu"
+XFORMERS_VERSION = "0.0.26.post1"
+
 PROJECT_ROOT = Path(__file__).parent
 PROMPT_PATH = PROJECT_ROOT / "prompt.json"
 COMFY_ROOT = Path("/workspace/ComfyUI")
@@ -43,21 +50,32 @@ logger = logging.getLogger(__name__)
 
 SYSTEM_PACKAGES = ["git", "ffmpeg", *EXTRA_SYSTEM_PACKAGES]
 
+TORCH_INDEX_URL = CUDA_WHEEL_INDEX if GPU_TYPE else CPU_WHEEL_INDEX
+TORCH_INSTALL_COMMAND = (
+    "pip install --no-cache-dir --force-reinstall --index-url "
+    f"{TORCH_INDEX_URL} torch=={TORCH_VERSION} torchvision=={TORCHVISION_VERSION} torchaudio=={TORCHAUDIO_VERSION}"
+)
+
+base_commands = [
+    "pip install --upgrade pip",
+    "pip install --upgrade setuptools wheel",
+    "test -d /workspace/ComfyUI || git clone --depth=1 https://github.com/comfyanonymous/ComfyUI.git /workspace/ComfyUI",
+    "cd /workspace/ComfyUI && pip install -r requirements.txt",
+    TORCH_INSTALL_COMMAND,
+    "pip install fastapi",
+]
+
+if GPU_TYPE:
+    base_commands.append(
+        "pip install --no-cache-dir --no-deps --index-url "
+        f"{CUDA_WHEEL_INDEX} xformers=={XFORMERS_VERSION}"
+    )
+
 image = (
     modal.Image.debian_slim(python_version="3.11")
     .apt_install(*SYSTEM_PACKAGES)
-    .run_commands(
-        [
-            "pip install --upgrade pip",
-            "pip install --upgrade setuptools wheel",
-            "test -d /workspace/ComfyUI || git clone --depth=1 https://github.com/comfyanonymous/ComfyUI.git /workspace/ComfyUI",
-            "cd /workspace/ComfyUI && pip install -r requirements.txt",
-            "pip install --no-cache-dir --force-reinstall --index-url https://download.pytorch.org/whl/cu121 torch==2.3.0 torchvision==0.18.0 torchaudio==2.3.0",
-        ]
-    )
+    .run_commands(base_commands)
 )
-
-image = image.pip_install("fastapi", "xformers")
 
 if EXTRA_PIP_PACKAGES:
     image = image.pip_install(*EXTRA_PIP_PACKAGES)

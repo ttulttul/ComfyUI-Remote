@@ -31,7 +31,7 @@ Progress coming back from the remote service is forwarded to ComfyUI's progress 
 - Install the Modal CLI (`pip install modal-client`) and authenticate (`modal token new`).
 - The `Modal Deployment` node now emits a self-contained Modal app that clones the upstream [ComfyUI](https://github.com/comfyanonymous/ComfyUI) repository inside the container—no external worker template required.
 - Optional pip dependencies and Debian packages can be declared through the node inputs; they are recorded in `modal_config.json` alongside the generated `workflow.py`.
-- GPU builds automatically install CUDA-enabled PyTorch wheels (`torch==2.3.0`, `torchvision==0.18.0`, `torchaudio==2.3.0` from the cu121 index) with `--force-reinstall`, add `xformers`, and export `/workspace/ComfyUI` on `PYTHONPATH` so ComfyUI’s `utils` package resolves correctly. Leaving the `Modal GPU` input blank defaults to an `H100`; set it explicitly if you need a different accelerator.
+- GPU builds automatically install CUDA-enabled PyTorch wheels (`torch==2.3.0`, `torchvision==0.18.0`, `torchaudio==2.3.0` from the cu121 index) with `--force-reinstall`, add `xformers==0.0.26.post1` via `pip install --no-deps` so Torch stays pinned, and export `/workspace/ComfyUI` on `PYTHONPATH` so ComfyUI’s `utils` package resolves correctly. Leaving the `Modal GPU` input blank defaults to an `H100`; set it explicitly if you need a different accelerator.
 
 ## Remote Protocol
 
