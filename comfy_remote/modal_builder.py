@@ -114,6 +114,15 @@ class ModalDeploymentNode(io.ComfyNode):
                     ),
                     optional=True,
                 ),
+                io.Boolean.Input(
+                    "delete_remote_app",
+                    display_name="Delete Remote App",
+                    default=False,
+                    tooltip=(
+                        "Call `modal app delete` before deployment so the remote app and image are removed."
+                    ),
+                    optional=True,
+                ),
             ],
             outputs=[
                 io.String.Output(
@@ -142,6 +151,7 @@ class ModalDeploymentNode(io.ComfyNode):
         dry_run: bool = False,
         clean_build: bool = False,
         force_rebuild: bool = False,
+        delete_remote_app: bool = False,
     ) -> io.NodeOutput:
         app_name = app_name or DEFAULT_APP_NAME
 
@@ -187,6 +197,12 @@ class ModalDeploymentNode(io.ComfyNode):
         cls._send_ui_update(
             "Running modal deploy – this can take a few minutes while dependencies install..."
         )
+        if delete_remote_app:
+            await cls._delete_modal_app(app_name)
+        if delete_remote_app:
+            cls._send_ui_update(f"Deleting Modal app '{app_name}' before redeployment...")
+            await cls._delete_modal_app(app_name)
+
         service_url = await cls._run_modal_deploy(project_paths.workflow)
         await execution_api.set_progress(1.0, 1.0, node_id=cls.hidden.unique_id)
         cls._send_ui_update(f"Modal deployment completed: {service_url}")
@@ -297,23 +313,7 @@ class ModalDeploymentNode(io.ComfyNode):
     async def _run_modal_deploy(cls, workflow_py: Path) -> str:
         command = ["modal", "deploy", str(workflow_py)]
         logger.info("Running Modal deploy: %s", " ".join(command))
-
-        process = await asyncio.create_subprocess_exec(
-            *command,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
-
-        stdout_task = asyncio.create_task(
-            cls._stream_subprocess_output(process.stdout, "stdout")
-        )
-        stderr_task = asyncio.create_task(
-            cls._stream_subprocess_output(process.stderr, "stderr")
-        )
-
-        returncode = await process.wait()
-        stdout = await stdout_task
-        stderr = await stderr_task
+        returncode, stdout, stderr = await cls._execute_modal_command(command)
 
         if returncode != 0:
             logger.error("Modal deploy failed with code %s: %s", returncode, stderr)
@@ -330,6 +330,57 @@ class ModalDeploymentNode(io.ComfyNode):
         service_url = match.group(0)
         logger.info("Modal deployment available at %s", service_url)
         return service_url
+
+    @classmethod
+    async def _delete_modal_app(cls, app_name: str) -> None:
+        attempts = [(True, "with --force"), (False, "without --force")]
+        for use_force, label in attempts:
+            command = cls._build_modal_delete_command(app_name, use_force)
+            logger.info("Deleting Modal app (%s): %s", label, " ".join(command))
+            returncode, stdout, stderr = await cls._execute_modal_command(command)
+            if returncode == 0:
+                logger.info("Modal app %s deleted", app_name)
+                return
+
+            combined = stderr.strip() or stdout.strip()
+            lowered = combined.lower()
+            if use_force and "no such option" in lowered:
+                logger.warning("Modal CLI does not support --force; retrying without it")
+                continue
+            if "not found" in lowered:
+                logger.info("Modal app %s not found remotely; proceeding", app_name)
+                return
+            raise ModalDeploymentError(
+                f"Modal app delete failed with exit code {returncode}: {combined or 'No output provided.'}"
+            )
+
+    @classmethod
+    async def _execute_modal_command(cls, command: list[str]) -> tuple[int, str, str]:
+        process = await asyncio.create_subprocess_exec(
+            *command,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+
+        stdout_task = asyncio.create_task(
+            cls._stream_subprocess_output(process.stdout, "stdout")
+        )
+        stderr_task = asyncio.create_task(
+            cls._stream_subprocess_output(process.stderr, "stderr")
+        )
+
+        returncode = await process.wait()
+        stdout = await stdout_task
+        stderr = await stderr_task
+        return returncode, stdout, stderr
+
+    @staticmethod
+    def _build_modal_delete_command(app_name: str, use_force: bool) -> list[str]:
+        command = ["modal", "app", "delete"]
+        if use_force:
+            command.append("--force")
+        command.append(app_name)
+        return command
 
     @classmethod
     def _send_ui_update(cls, message: str) -> None:
