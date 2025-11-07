@@ -199,8 +199,6 @@ class ModalDeploymentNode(io.ComfyNode):
             "Running modal deploy – this can take a few minutes while dependencies install..."
         )
         if delete_remote_app:
-            await cls._delete_modal_app(app_name)
-        if delete_remote_app:
             cls._send_ui_update(f"Stopping Modal app '{app_name}' before redeployment...")
             await cls._stop_modal_app(app_name)
 
