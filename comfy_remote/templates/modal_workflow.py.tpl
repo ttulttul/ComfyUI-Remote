@@ -6,6 +6,7 @@ import asyncio
 import base64
 import json
 import logging
+import os
 import pickle
 import sys
 import uuid
@@ -14,6 +15,8 @@ from typing import Any, Dict
 
 import modal
 from fastapi import Request
+
+logger = logging.getLogger(__name__)
 
 try:  # pragma: no cover - optional GPU detection for typing friendliness.
     import torch
@@ -36,8 +39,41 @@ PROJECT_ROOT = Path(__file__).parent
 PROMPT_PATH = PROJECT_ROOT / "prompt.json"
 COMFY_ROOT = Path("/workspace/ComfyUI")
 
-if str(COMFY_ROOT) not in sys.path:
-    sys.path.insert(0, str(COMFY_ROOT))
+
+def _ensure_comfy_module_resolution() -> None:
+    """Guarantee that ComfyUI's bundled packages shadow similarly named PyPI modules."""
+
+    comfy_path = str(COMFY_ROOT)
+    if comfy_path not in sys.path:
+        sys.path.insert(0, comfy_path)
+
+    existing_python_path = os.environ.get("PYTHONPATH")
+    if not existing_python_path:
+        os.environ["PYTHONPATH"] = comfy_path
+    elif comfy_path not in existing_python_path.split(os.pathsep):
+        os.environ["PYTHONPATH"] = os.pathsep.join([comfy_path, existing_python_path])
+
+    preloaded_utils = sys.modules.get("utils")
+    if preloaded_utils is None:
+        return
+
+    module_file = getattr(preloaded_utils, "__file__", "")
+    try:
+        module_path = Path(module_file).resolve()
+    except Exception:  # pragma: no cover - defensive; some modules lack real paths.
+        module_path = None
+
+    if module_path and str(COMFY_ROOT) in str(module_path):
+        return
+
+    logger.debug(
+        "Removing preloaded third-party 'utils' module (%s) so ComfyUI's package can be imported",
+        module_file or "unknown",
+    )
+    sys.modules.pop("utils", None)
+
+
+_ensure_comfy_module_resolution()
 
 try:
     from comfy_api.latest import io  # type: ignore
@@ -45,8 +81,6 @@ except ModuleNotFoundError as exc:  # pragma: no cover - runtime guard for missi
     raise RuntimeError(
         "ComfyUI must be installed inside the Modal image; run modal deploy after building the image."
     ) from exc
-
-logger = logging.getLogger(__name__)
 
 SYSTEM_PACKAGES = ["git", "ffmpeg", *EXTRA_SYSTEM_PACKAGES]
 
