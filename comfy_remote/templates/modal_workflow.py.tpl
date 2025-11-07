@@ -13,7 +13,7 @@ import pickle
 import sys
 import uuid
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, List
 
 import modal
 from fastapi import Request
@@ -226,6 +226,7 @@ class RemoteOutputNode(io.ComfyNode):
     """Captures payload that needs to be sent back to the remote caller."""
 
     _output_store: Dict[str, Dict[str, Any]] = {}
+    OUTPUT_NODE = True
 
     @classmethod
     def define_schema(cls) -> io.Schema:
@@ -258,6 +259,12 @@ class RemoteOutputNode(io.ComfyNode):
 
     @classmethod
     def execute(cls, value: Any, key: str) -> io.NodeOutput:
+        logger.info(
+            "RemoteOutputNode %s storing key '%s' (%s)",
+            cls.hidden.unique_id,
+            key,
+            type(value).__name__,
+        )
         cls._register_output(cls.hidden.unique_id, key, value)
         return io.NodeOutput(value)
 
@@ -338,6 +345,7 @@ class ComfyRuntime:
         self._executor = None
         self._server = None
         self._initialized = False
+        self._execution = None
 
     async def ensure_ready(self) -> None:
         if self._initialized:
@@ -354,6 +362,7 @@ class ComfyRuntime:
         loop = asyncio.get_running_loop()
         self._server = PromptServer(loop)
         self._executor = execution.PromptExecutor(self._server)
+        self._execution = execution
         self._register_remote_nodes(nodes)
         self._initialized = True
         logger.info("Comfy runtime initialised inside Modal worker")
@@ -378,8 +387,15 @@ class ComfyRuntime:
         if "extra_pnginfo" in payload:
             extra_data["extra_pnginfo"] = payload["extra_pnginfo"]
 
+        execute_outputs = await self._determine_execute_outputs(prompt_id, prompt)
+
         assert self._executor is not None
-        await self._executor.execute_async(prompt, prompt_id, extra_data=extra_data)
+        await self._executor.execute_async(
+            prompt,
+            prompt_id,
+            extra_data=extra_data,
+            execute_outputs=execute_outputs,
+        )
 
         if not self._executor.success:
             raise RuntimeError("Comfy workflow reported failure; inspect status messages for details.")
@@ -419,6 +435,35 @@ class ComfyRuntime:
                 if bucket:
                     collected.update(bucket)
         return collected
+
+    async def _determine_execute_outputs(self, prompt_id: str, prompt: Dict[str, Any]) -> List[str]:
+        if self._execution is None:
+            raise RuntimeError("Comfy execution helpers are not initialised")
+
+        validation = await self._execution.validate_prompt(prompt_id, prompt, None)
+        valid, error, outputs, node_errors = validation
+        if not valid:
+            message = "unknown validation error"
+            if isinstance(error, dict):
+                message = error.get("message") or error.get("type") or message
+            elif error:
+                message = str(error)
+
+            if node_errors:
+                for node_id, info in node_errors.items():
+                    logger.error(
+                        "Validation error in node %s (%s): %s",
+                        node_id,
+                        info.get("class_type", "unknown"),
+                        info.get("errors"),
+                    )
+            raise RuntimeError(f"Prompt validation failed: {message}")
+
+        if not outputs:
+            raise RuntimeError("Prompt validation did not yield any output nodes")
+
+        logger.info("Prompt %s will execute %d output nodes", prompt_id, len(outputs))
+        return outputs
 
 
 runtime = ComfyRuntime()

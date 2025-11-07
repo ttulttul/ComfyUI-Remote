@@ -75,6 +75,7 @@ class RemoteOutputNode(io.ComfyNode):
     """Captures payload that needs to be sent back to the remote caller."""
 
     _output_store: dict[str, dict[str, Any]] = {}
+    OUTPUT_NODE = True
 
     @classmethod
     def define_schema(cls) -> io.Schema:
@@ -107,6 +108,12 @@ class RemoteOutputNode(io.ComfyNode):
 
     @classmethod
     def execute(cls, value: Any, key: str) -> io.NodeOutput:
+        logger.info(
+            "RemoteOutputNode %s storing key '%s' (%s)",
+            cls.hidden.unique_id,
+            key,
+            type(value).__name__,
+        )
         cls._register_output(cls.hidden.unique_id, key, value)
         return io.NodeOutput(value)
 

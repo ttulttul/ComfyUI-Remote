@@ -33,6 +33,9 @@ class RemoteNodesTest(unittest.TestCase):
 
         self.assertIsNone(RemoteOutputNode.pop_output(node_id))
 
+    def test_remote_output_marked_as_output_node(self):
+        self.assertTrue(getattr(RemoteOutputNode, "OUTPUT_NODE", False))
+
 
 class ModalDeploymentTest(unittest.TestCase):
     def test_prepare_modal_project_generates_files(self):
@@ -88,6 +91,8 @@ class ModalDeploymentTest(unittest.TestCase):
             self.assertIn("EXTRA_PIP_PACKAGES = ['numpy']", workflow_source)
             self.assertIn("EXTRA_SYSTEM_PACKAGES = ['libgl1']", workflow_source)
             self.assertIn("GPU_TYPE = 'A10G'", workflow_source)
+            self.assertIn('validate_prompt(prompt_id, prompt, None)', workflow_source)
+            self.assertIn('_determine_execute_outputs', workflow_source)
 
     def test_prepare_modal_project_defaults_to_h100_gpu(self):
         with tempfile.TemporaryDirectory() as tmpdir:
