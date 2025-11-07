@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any, Dict
 
 import modal
+from modal import Mount
 from fastapi import Request
 
 logger = logging.getLogger(__name__)
@@ -143,7 +144,7 @@ if GPU_TYPE:
         f"{CUDA_WHEEL_INDEX} xformers=={XFORMERS_VERSION}"
     )
 
-PROJECT_MOUNT = modal.Mount.from_local_dir(
+PROJECT_MOUNT = Mount.from_local_dir(
     LOCAL_PROJECT_ROOT,
     remote_path=REMOTE_PROJECT_ROOT,
 )
