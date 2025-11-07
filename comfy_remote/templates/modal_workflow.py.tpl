@@ -16,7 +16,6 @@ from pathlib import Path
 from typing import Any, Dict
 
 import modal
-from modal.mounts import Mount
 from fastapi import Request
 
 logger = logging.getLogger(__name__)
@@ -31,6 +30,7 @@ EXTRA_PIP_PACKAGES = $PIP_PACKAGES
 EXTRA_SYSTEM_PACKAGES = $SYSTEM_PACKAGES
 GPU_TYPE = $GPU_LITERAL
 BUILD_NONCE = $BUILD_NONCE
+PROMPT_JSON_LITERAL = $PROMPT_JSON_LITERAL
 
 TORCH_VERSION = "2.3.0"
 TORCHVISION_VERSION = "0.18.0"
@@ -39,9 +39,7 @@ CUDA_WHEEL_INDEX = "https://download.pytorch.org/whl/cu121"
 CPU_WHEEL_INDEX = "https://download.pytorch.org/whl/cpu"
 XFORMERS_VERSION = "0.0.26.post1"
 
-LOCAL_PROJECT_ROOT = Path(__file__).parent
-REMOTE_PROJECT_ROOT = Path("/project")
-PROJECT_ROOT = REMOTE_PROJECT_ROOT
+PROJECT_ROOT = Path(__file__).parent
 PROMPT_PATH = PROJECT_ROOT / "prompt.json"
 COMFY_ROOT = Path("/workspace/ComfyUI")
 
@@ -144,11 +142,6 @@ if GPU_TYPE:
         f"{CUDA_WHEEL_INDEX} xformers=={XFORMERS_VERSION}"
     )
 
-PROJECT_MOUNT = Mount.from_local_dir(
-    LOCAL_PROJECT_ROOT,
-    remote_path=REMOTE_PROJECT_ROOT,
-)
-
 image = (
     modal.Image.debian_slim(python_version="3.11")
     .apt_install(*SYSTEM_PACKAGES)
@@ -160,12 +153,7 @@ if EXTRA_PIP_PACKAGES:
 
 image = image.env({"PYTHONPATH": "/workspace/ComfyUI"})
 
-function_kwargs: Dict[str, Any] = {
-    "image": image,
-    "min_containers": 1,
-    "timeout": 900,
-    "mounts": [PROJECT_MOUNT],
-}
+function_kwargs: Dict[str, Any] = {"image": image, "min_containers": 1, "timeout": 900}
 
 if GPU_TYPE:
     function_kwargs["gpu"] = str(GPU_TYPE)
@@ -381,7 +369,7 @@ class ComfyRuntime:
     async def run(self, payload: Dict[str, Any]) -> Dict[str, Any]:
         await self.ensure_ready()
 
-        prompt = json.loads(PROMPT_PATH.read_text())
+        prompt = _load_prompt_payload()
         decoded_inputs = self._decode_inputs(payload)
         self._inject_payloads(prompt, decoded_inputs)
 
@@ -448,3 +436,10 @@ async def infer_sync(request: Request) -> Dict[str, Any]:
             "status": "failed",
             "message": str(exc),
         }
+def _load_prompt_payload() -> Dict[str, Any]:
+    if PROMPT_PATH.exists():
+        try:
+            return json.loads(PROMPT_PATH.read_text())
+        except Exception as exc:
+            logger.warning("Failed to read prompt.json (%s); using embedded payload", exc)
+    return json.loads(PROMPT_JSON_LITERAL)

@@ -232,6 +232,7 @@ class ModalDeploymentNode(io.ComfyNode):
         config_path = target_root / "modal_config.json"
         workflow_py = target_root / "workflow.py"
 
+        prompt_payload = workflow_file.read_text()
         shutil.copyfile(workflow_file, prompt_path)
         logger.debug("Copied workflow JSON to %s", prompt_path)
 
@@ -254,6 +255,7 @@ class ModalDeploymentNode(io.ComfyNode):
                 system_packages=system_packages,
                 gpu_type=gpu_type,
                 build_nonce=build_nonce,
+                prompt_literal=prompt_payload,
             )
         )
         logger.debug("Generated workflow.py template at %s", workflow_py)
@@ -296,6 +298,7 @@ class ModalDeploymentNode(io.ComfyNode):
         system_packages: list[str],
         gpu_type: str | None,
         build_nonce: str | None,
+        prompt_literal: str,
     ) -> str:
         template_path = Path(__file__).resolve().parent / "templates" / "modal_workflow.py.tpl"
         if not template_path.exists():
@@ -310,6 +313,7 @@ class ModalDeploymentNode(io.ComfyNode):
             "SYSTEM_PACKAGES": repr(system_packages or []),
             "GPU_LITERAL": repr(gpu_type),
             "BUILD_NONCE": repr(build_nonce),
+            "PROMPT_JSON_LITERAL": json.dumps(prompt_literal),
         }
         return template.substitute(substitutions)
 
