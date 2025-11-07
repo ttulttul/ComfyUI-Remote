@@ -27,6 +27,7 @@ APP_NAME = $APP_NAME
 EXTRA_PIP_PACKAGES = $PIP_PACKAGES
 EXTRA_SYSTEM_PACKAGES = $SYSTEM_PACKAGES
 GPU_TYPE = $GPU_LITERAL
+BUILD_NONCE = $BUILD_NONCE
 
 TORCH_VERSION = "2.3.0"
 TORCHVISION_VERSION = "0.18.0"
@@ -74,6 +75,9 @@ def _ensure_comfy_module_resolution() -> None:
 
 
 _ensure_comfy_module_resolution()
+
+if BUILD_NONCE:
+    logger.info("Modal build nonce activated: %s", BUILD_NONCE)
 
 try:
     from comfy_api.latest import io  # type: ignore

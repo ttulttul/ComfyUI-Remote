@@ -7,6 +7,7 @@ import json
 import logging
 import re
 import shutil
+import uuid
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict
@@ -108,7 +109,9 @@ class ModalDeploymentNode(io.ComfyNode):
                     "force_rebuild",
                     display_name="Force Modal Rebuild",
                     default=False,
-                    tooltip="Pass --force-rebuild to the Modal CLI so the remote image is rebuilt even when files are cached.",
+                    tooltip=(
+                        "Embed a build nonce so Modal rebuilds the remote image even when sources look cached."
+                    ),
                     optional=True,
                 ),
             ],
@@ -154,6 +157,8 @@ class ModalDeploymentNode(io.ComfyNode):
 
         await execution_api.set_progress(0.05, 1.0, node_id=cls.hidden.unique_id)
         cls._send_ui_update("Preparing Modal project scaffold...")
+        build_nonce: str | None = uuid.uuid4().hex if force_rebuild else None
+
         project_paths = cls._prepare_modal_project(
             workflow_file=workflow_file,
             app_name=app_name,
@@ -162,6 +167,7 @@ class ModalDeploymentNode(io.ComfyNode):
             system_packages=system_packages,
             gpu_type=gpu_choice,
             clean_build=bool(clean_build),
+            build_nonce=build_nonce,
         )
 
         await execution_api.set_progress(0.25, 1.0, node_id=cls.hidden.unique_id)
@@ -181,10 +187,7 @@ class ModalDeploymentNode(io.ComfyNode):
         cls._send_ui_update(
             "Running modal deploy – this can take a few minutes while dependencies install..."
         )
-        service_url = await cls._run_modal_deploy(
-            project_paths.workflow,
-            force_rebuild=bool(force_rebuild),
-        )
+        service_url = await cls._run_modal_deploy(project_paths.workflow)
         await execution_api.set_progress(1.0, 1.0, node_id=cls.hidden.unique_id)
         cls._send_ui_update(f"Modal deployment completed: {service_url}")
         return io.NodeOutput(service_url)
@@ -199,6 +202,7 @@ class ModalDeploymentNode(io.ComfyNode):
         system_packages: list[str],
         gpu_type: str | None,
         clean_build: bool,
+        build_nonce: str | None,
     ) -> ModalProjectPaths:
         target_root = cls._resolve_target_directory(workflow_file, working_directory, app_name)
         if clean_build and target_root.exists():
@@ -219,6 +223,9 @@ class ModalDeploymentNode(io.ComfyNode):
             "extra_system_packages": system_packages,
             "gpu_type": gpu_type or "H100",
         }
+        if build_nonce:
+            config_payload["build_nonce"] = build_nonce
+
         config_path.write_text(json.dumps(config_payload, indent=2))
         logger.debug("Wrote Modal config to %s", config_path)
 
@@ -228,6 +235,7 @@ class ModalDeploymentNode(io.ComfyNode):
                 pip_packages=pip_packages,
                 system_packages=system_packages,
                 gpu_type=gpu_type,
+                build_nonce=build_nonce,
             )
         )
         logger.debug("Generated workflow.py template at %s", workflow_py)
@@ -267,6 +275,7 @@ class ModalDeploymentNode(io.ComfyNode):
         pip_packages: list[str],
         system_packages: list[str],
         gpu_type: str | None,
+        build_nonce: str | None,
     ) -> str:
         template_path = Path(__file__).resolve().parent / "templates" / "modal_workflow.py.tpl"
         if not template_path.exists():
@@ -280,12 +289,13 @@ class ModalDeploymentNode(io.ComfyNode):
             "PIP_PACKAGES": repr(pip_packages or []),
             "SYSTEM_PACKAGES": repr(system_packages or []),
             "GPU_LITERAL": repr(gpu_type),
+            "BUILD_NONCE": repr(build_nonce),
         }
         return template.substitute(substitutions)
 
     @classmethod
-    async def _run_modal_deploy(cls, workflow_py: Path, force_rebuild: bool) -> str:
-        command = cls._build_modal_deploy_command(workflow_py, force_rebuild)
+    async def _run_modal_deploy(cls, workflow_py: Path) -> str:
+        command = ["modal", "deploy", str(workflow_py)]
         logger.info("Running Modal deploy: %s", " ".join(command))
 
         process = await asyncio.create_subprocess_exec(
@@ -320,14 +330,6 @@ class ModalDeploymentNode(io.ComfyNode):
         service_url = match.group(0)
         logger.info("Modal deployment available at %s", service_url)
         return service_url
-
-    @staticmethod
-    def _build_modal_deploy_command(workflow_py: Path, force_rebuild: bool) -> list[str]:
-        base = ["modal", "deploy"]
-        if force_rebuild:
-            base.append("--force-rebuild")
-        base.append(str(workflow_py))
-        return base
 
     @classmethod
     def _send_ui_update(cls, message: str) -> None:

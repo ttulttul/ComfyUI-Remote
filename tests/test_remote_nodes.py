@@ -49,6 +49,7 @@ class ModalDeploymentTest(unittest.TestCase):
                 system_packages=["libgl1"],
                 gpu_type="A10G",
                 clean_build=False,
+                build_nonce=None,
             )
 
             self.assertTrue(project.prompt.exists())
@@ -93,6 +94,7 @@ class ModalDeploymentTest(unittest.TestCase):
                 system_packages=[],
                 gpu_type=None,
                 clean_build=False,
+                build_nonce=None,
             )
 
             config = json.loads(project.config.read_text())
@@ -112,6 +114,7 @@ class ModalDeploymentTest(unittest.TestCase):
                 system_packages=[],
                 gpu_type=None,
                 clean_build=False,
+                build_nonce=None,
             )
 
             stale_file = initial.root / "stale.txt"
@@ -126,24 +129,35 @@ class ModalDeploymentTest(unittest.TestCase):
                 system_packages=[],
                 gpu_type=None,
                 clean_build=True,
+                build_nonce=None,
             )
 
             self.assertFalse((rebuilt.root / "stale.txt").exists())
 
-    def test_force_rebuild_flag_in_modal_command(self):
-        fake_workflow = Path("/tmp/workflow.py")
-        command = ModalDeploymentNode._build_modal_deploy_command(
-            fake_workflow,
-            force_rebuild=True,
-        )
-        self.assertEqual(command[:3], ["modal", "deploy", "--force-rebuild"])
-        self.assertEqual(command[-1], str(fake_workflow))
+    def test_force_rebuild_injects_build_nonce(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmpdir_path = Path(tmpdir)
+            workflow_path = tmpdir_path / "workflow.json"
+            workflow_path.write_text(json.dumps({"nodes": []}))
 
-        default_command = ModalDeploymentNode._build_modal_deploy_command(
-            fake_workflow,
-            force_rebuild=False,
-        )
-        self.assertNotIn("--force-rebuild", default_command)
+            nonce = "forced-nonce"
+            project = ModalDeploymentNode._prepare_modal_project(
+                workflow_file=workflow_path,
+                app_name="nonce-app",
+                working_directory=tmpdir,
+                pip_packages=[],
+                system_packages=[],
+                gpu_type=None,
+                clean_build=False,
+                build_nonce=nonce,
+            )
+
+            config = json.loads(project.config.read_text())
+            self.assertEqual(config.get("build_nonce"), nonce)
+
+            workflow_source = project.workflow.read_text()
+            self.assertIn(f"BUILD_NONCE = '{nonce}'", workflow_source)
+            self.assertIn("Modal build nonce activated", workflow_source)
 
 
 if __name__ == "__main__":
