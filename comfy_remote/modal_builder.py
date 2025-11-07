@@ -253,7 +253,7 @@ class ModalDeploymentNode(io.ComfyNode):
                 system_packages=system_packages,
                 gpu_type=gpu_type,
                 build_nonce=build_nonce,
-                prompt_literal=json.dumps(prompt_payload),
+        prompt_literal=json.dumps(prompt_payload),
             )
         )
         logger.debug("Generated workflow.py template at %s", workflow_py)
@@ -311,7 +311,7 @@ class ModalDeploymentNode(io.ComfyNode):
             "SYSTEM_PACKAGES": repr(system_packages or []),
             "GPU_LITERAL": repr(gpu_type),
             "BUILD_NONCE": repr(build_nonce),
-            "PROMPT_JSON_LITERAL": prompt_literal,
+            "PROMPT_JSON_LITERAL": repr(prompt_literal),
         }
         return template.substitute(substitutions)
 
