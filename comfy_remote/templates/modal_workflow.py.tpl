@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import importlib.util
 import json
 import logging
 import os
@@ -72,6 +73,19 @@ def _ensure_comfy_module_resolution() -> None:
         module_file or "unknown",
     )
     sys.modules.pop("utils", None)
+
+    comfy_utils_root = COMFY_ROOT / "utils"
+    comfy_utils_init = comfy_utils_root / "__init__.py"
+    if comfy_utils_init.exists():
+        spec = importlib.util.spec_from_file_location(
+            "utils",
+            str(comfy_utils_init),
+            submodule_search_locations=[str(comfy_utils_root)],
+        )
+        if spec and spec.loader:
+            module = importlib.util.module_from_spec(spec)
+            sys.modules["utils"] = module
+            spec.loader.exec_module(module)
 
 
 _ensure_comfy_module_resolution()
