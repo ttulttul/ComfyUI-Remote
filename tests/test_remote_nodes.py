@@ -75,7 +75,7 @@ class ModalDeploymentTest(unittest.TestCase):
             self.assertIn('pip uninstall -y utils || true', workflow_source)
             self.assertIn('_ensure_comfy_module_resolution()', workflow_source)
             self.assertIn('importlib.util.spec_from_file_location', workflow_source)
-            self.assertIn('from modal import Mount', workflow_source)
+            self.assertIn('from modal.mounts import Mount', workflow_source)
             self.assertIn('Mount.from_local_dir', workflow_source)
             self.assertIn('remote_path=REMOTE_PROJECT_ROOT', workflow_source)
             self.assertIn('TORCH_INSTALL_COMMAND = (', workflow_source)

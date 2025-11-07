@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Any, Dict
 
 import modal
-from modal import Mount
+from modal.mounts import Mount
 from fastapi import Request
 
 logger = logging.getLogger(__name__)
