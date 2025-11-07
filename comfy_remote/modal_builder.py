@@ -104,6 +104,13 @@ class ModalDeploymentNode(io.ComfyNode):
                     tooltip="Delete the existing Modal build directory before regenerating project files.",
                     optional=True,
                 ),
+                io.Boolean.Input(
+                    "force_rebuild",
+                    display_name="Force Modal Rebuild",
+                    default=False,
+                    tooltip="Pass --force-rebuild to the Modal CLI so the remote image is rebuilt even when files are cached.",
+                    optional=True,
+                ),
             ],
             outputs=[
                 io.String.Output(
@@ -131,6 +138,7 @@ class ModalDeploymentNode(io.ComfyNode):
         deploy: bool = True,
         dry_run: bool = False,
         clean_build: bool = False,
+        force_rebuild: bool = False,
     ) -> io.NodeOutput:
         app_name = app_name or DEFAULT_APP_NAME
 
@@ -173,7 +181,10 @@ class ModalDeploymentNode(io.ComfyNode):
         cls._send_ui_update(
             "Running modal deploy – this can take a few minutes while dependencies install..."
         )
-        service_url = await cls._run_modal_deploy(project_paths.workflow)
+        service_url = await cls._run_modal_deploy(
+            project_paths.workflow,
+            force_rebuild=bool(force_rebuild),
+        )
         await execution_api.set_progress(1.0, 1.0, node_id=cls.hidden.unique_id)
         cls._send_ui_update(f"Modal deployment completed: {service_url}")
         return io.NodeOutput(service_url)
@@ -273,8 +284,8 @@ class ModalDeploymentNode(io.ComfyNode):
         return template.substitute(substitutions)
 
     @classmethod
-    async def _run_modal_deploy(cls, workflow_py: Path) -> str:
-        command = ["modal", "deploy", str(workflow_py)]
+    async def _run_modal_deploy(cls, workflow_py: Path, force_rebuild: bool) -> str:
+        command = cls._build_modal_deploy_command(workflow_py, force_rebuild)
         logger.info("Running Modal deploy: %s", " ".join(command))
 
         process = await asyncio.create_subprocess_exec(
@@ -309,6 +320,14 @@ class ModalDeploymentNode(io.ComfyNode):
         service_url = match.group(0)
         logger.info("Modal deployment available at %s", service_url)
         return service_url
+
+    @staticmethod
+    def _build_modal_deploy_command(workflow_py: Path, force_rebuild: bool) -> list[str]:
+        base = ["modal", "deploy"]
+        if force_rebuild:
+            base.append("--force-rebuild")
+        base.append(str(workflow_py))
+        return base
 
     @classmethod
     def _send_ui_update(cls, message: str) -> None:

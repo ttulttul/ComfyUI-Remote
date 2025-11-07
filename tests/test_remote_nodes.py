@@ -130,6 +130,21 @@ class ModalDeploymentTest(unittest.TestCase):
 
             self.assertFalse((rebuilt.root / "stale.txt").exists())
 
+    def test_force_rebuild_flag_in_modal_command(self):
+        fake_workflow = Path("/tmp/workflow.py")
+        command = ModalDeploymentNode._build_modal_deploy_command(
+            fake_workflow,
+            force_rebuild=True,
+        )
+        self.assertEqual(command[:3], ["modal", "deploy", "--force-rebuild"])
+        self.assertEqual(command[-1], str(fake_workflow))
+
+        default_command = ModalDeploymentNode._build_modal_deploy_command(
+            fake_workflow,
+            force_rebuild=False,
+        )
+        self.assertNotIn("--force-rebuild", default_command)
+
 
 if __name__ == "__main__":
     unittest.main()
