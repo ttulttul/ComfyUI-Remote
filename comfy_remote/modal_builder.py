@@ -258,6 +258,8 @@ class ModalDeploymentNode(io.ComfyNode):
         )
         logger.debug("Generated workflow.py template at %s", workflow_py)
 
+        cls._write_utils_shim(target_root)
+
         return ModalProjectPaths(
             root=target_root,
             prompt=prompt_path,
@@ -310,6 +312,36 @@ class ModalDeploymentNode(io.ComfyNode):
             "BUILD_NONCE": repr(build_nonce),
         }
         return template.substitute(substitutions)
+
+    @staticmethod
+    def _write_utils_shim(target_root: Path) -> None:
+        shim_dir = target_root / "utils"
+        shim_dir.mkdir(exist_ok=True)
+        shim_path = shim_dir / "__init__.py"
+        shim_source = """import importlib.util
+import pathlib
+import sys
+
+COMFY_ROOT = pathlib.Path("/workspace/ComfyUI")
+COMFY_UTILS = COMFY_ROOT / "utils"
+COMFY_UTILS_INIT = COMFY_UTILS / "__init__.py"
+
+if not COMFY_UTILS_INIT.exists():
+    raise ImportError(f"Comfy utils package missing at {COMFY_UTILS_INIT}")
+
+spec = importlib.util.spec_from_file_location(
+    __name__,
+    str(COMFY_UTILS_INIT),
+    submodule_search_locations=[str(COMFY_UTILS)],
+)
+if spec is None or spec.loader is None:
+    raise ImportError("Failed to build import spec for Comfy utils package")
+
+module = importlib.util.module_from_spec(spec)
+sys.modules[__name__] = module
+spec.loader.exec_module(module)
+"""
+        shim_path.write_text(shim_source)
 
     @classmethod
     async def _run_modal_deploy(cls, workflow_py: Path, force_rebuild: bool) -> str:

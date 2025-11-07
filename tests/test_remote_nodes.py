@@ -62,6 +62,11 @@ class ModalDeploymentTest(unittest.TestCase):
             self.assertEqual(config["extra_system_packages"], ["libgl1"])
             self.assertEqual(config["gpu_type"], "A10G")
 
+            shim_path = project.root / "utils" / "__init__.py"
+            shim_source = shim_path.read_text()
+            self.assertIn("COMFY_UTILS_INIT", shim_source)
+            self.assertIn("spec_from_file_location", shim_source)
+
             workflow_source = project.workflow.read_text()
             self.assertIn("modal.App", workflow_source)
             self.assertIn("PROMPT_PATH", workflow_source)
@@ -101,6 +106,9 @@ class ModalDeploymentTest(unittest.TestCase):
 
             config = json.loads(project.config.read_text())
             self.assertEqual(config["gpu_type"], "H100")
+
+            shim_path = project.root / "utils" / "__init__.py"
+            self.assertTrue(shim_path.exists())
 
     def test_clean_build_removes_existing_directory(self):
         with tempfile.TemporaryDirectory() as tmpdir:

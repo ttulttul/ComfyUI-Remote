@@ -35,6 +35,7 @@ Progress coming back from the remote service is forwarded to ComfyUI's progress 
 - Enable `Force Modal Rebuild` to embed a unique build nonce and run `modal deploy` with `MODAL_IGNORE_CACHE=1`, ensuring Modal rebuilds remote layers even when they look cached.
 - Enable `Delete Remote App` to invoke `modal app stop <app-name>` before deploy so the previous Modal deployment is torn down before rebuilding.
 - The generated image proactively removes any pip-installed `utils` module (`pip uninstall -y utils || true`) so ComfyUI's bundled `utils.install_util` always resolves.
+- A `utils` shim module is written next to the generated workflow so any `import utils.*` statements are forced to load `/workspace/ComfyUI/utils` even if another package named `utils` is present.
 - GPU builds automatically install CUDA-enabled PyTorch wheels (`torch==2.3.0`, `torchvision==0.18.0`, `torchaudio==2.3.0` from the cu121 index) with `--force-reinstall`, add `xformers==0.0.26.post1` via `pip install --no-deps` so Torch stays pinned, and export `/workspace/ComfyUI` on `PYTHONPATH` so ComfyUI’s `utils` package resolves correctly. Leaving the `Modal GPU` input blank defaults to an `H100`; set it explicitly if you need a different accelerator.
 - The generated Modal runtime removes any preloaded PyPI `utils` module before importing ComfyUI so `utils.install_util` resolves to the bundled helper package instead of third-party stubs.
 
