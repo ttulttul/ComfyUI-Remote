@@ -32,8 +32,8 @@ Progress coming back from the remote service is forwarded to ComfyUI's progress 
 - The `Modal Deployment` node now emits a self-contained Modal app that clones the upstream [ComfyUI](https://github.com/comfyanonymous/ComfyUI) repository inside the container—no external worker template required.
 - Optional pip dependencies and Debian packages can be declared through the node inputs; they are recorded in `modal_config.json` alongside the generated `workflow.py`.
 - Toggle `Clean Build` when you need to blow away the existing Modal project directory (useful if you changed GPUs or want Modal to forget a previous deployment scaffold).
-- Enable `Force Modal Rebuild` to embed a unique build nonce and run `modal deploy` with `MODAL_IGNORE_CACHE=1`, ensuring Modal rebuilds remote layers even when they look cached.
-- Enable `Delete Remote App` to invoke `modal app stop <app-name>` before deploy so the previous Modal deployment is torn down before rebuilding.
+- Enable `Rebuild Modal App` to embed a unique build nonce and run `modal deploy` with `MODAL_IGNORE_CACHE=1`, ensuring Modal rebuilds remote layers even when they look cached.
+- Enable `Delete Modal App` to invoke `modal app stop <app-name>` before deploy so the previous Modal deployment is torn down before rebuilding.
 - The generated image proactively removes any pip-installed `utils` module (`pip uninstall -y utils || true`) so ComfyUI's bundled `utils.install_util` always resolves.
 - A `utils` shim module is written next to the generated workflow so any `import utils.*` statements are forced to load `/workspace/ComfyUI/utils` even if another package named `utils` is present, and the workflow now embeds the prompt JSON directly so the Modal runtime never has to read from the local filesystem.
 - Modal logs now include detailed diagnostics showing the pre-/post-cleanup `utils` module path and when the shim loads, so you can confirm remote environments are using the correct package.

@@ -3,7 +3,7 @@ import tempfile
 from pathlib import Path
 import unittest
 
-from comfy_remote.modal_builder import ModalDeploymentNode
+from comfy_remote.modal_builder import ModalDeploymentError, ModalDeploymentNode
 from comfy_remote.remote_io import RemoteInputNode, RemoteOutputNode
 
 
@@ -39,7 +39,7 @@ class ModalDeploymentTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             tmpdir_path = Path(tmpdir)
             workflow_path = tmpdir_path / "workflow.json"
-            workflow_path.write_text(json.dumps({"nodes": []}))
+            workflow_path.write_text(json.dumps({"1": {"class_type": "TestNode"}}))
 
             project = ModalDeploymentNode._prepare_modal_project(
                 workflow_file=workflow_path,
@@ -93,7 +93,7 @@ class ModalDeploymentTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             tmpdir_path = Path(tmpdir)
             workflow_path = tmpdir_path / "workflow.json"
-            workflow_path.write_text(json.dumps({"nodes": []}))
+            workflow_path.write_text(json.dumps({"1": {"class_type": "TestNode"}}))
 
             project = ModalDeploymentNode._prepare_modal_project(
                 workflow_file=workflow_path,
@@ -116,7 +116,7 @@ class ModalDeploymentTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             tmpdir_path = Path(tmpdir)
             workflow_path = tmpdir_path / "workflow.json"
-            workflow_path.write_text(json.dumps({"nodes": []}))
+            workflow_path.write_text(json.dumps({"1": {"class_type": "TestNode"}}))
 
             initial = ModalDeploymentNode._prepare_modal_project(
                 workflow_file=workflow_path,
@@ -146,11 +146,11 @@ class ModalDeploymentTest(unittest.TestCase):
 
             self.assertFalse((rebuilt.root / "stale.txt").exists())
 
-    def test_force_rebuild_injects_build_nonce(self):
+    def test_rebuild_modal_app_injects_build_nonce(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             tmpdir_path = Path(tmpdir)
             workflow_path = tmpdir_path / "workflow.json"
-            workflow_path.write_text(json.dumps({"nodes": []}))
+            workflow_path.write_text(json.dumps({"1": {"class_type": "TestNode"}}))
 
             nonce = "forced-nonce"
             project = ModalDeploymentNode._prepare_modal_project(
@@ -180,6 +180,25 @@ class ModalDeploymentTest(unittest.TestCase):
 
         env_forced = ModalDeploymentNode._build_modal_deploy_env(True)
         self.assertEqual(env_forced, {"MODAL_IGNORE_CACHE": "1"})
+
+
+    def test_invalid_workflow_format_raises(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmpdir_path = Path(tmpdir)
+            workflow_path = tmpdir_path / "workflow.json"
+            workflow_path.write_text(json.dumps({"nodes": []}))
+
+            with self.assertRaisesRegex(ModalDeploymentError, "graph format"):
+                ModalDeploymentNode._prepare_modal_project(
+                    workflow_file=workflow_path,
+                    app_name="bad",
+                    working_directory=tmpdir,
+                    pip_packages=[],
+                    system_packages=[],
+                    gpu_type=None,
+                    clean_build=False,
+                    build_nonce=None,
+                )
 
 
 if __name__ == "__main__":

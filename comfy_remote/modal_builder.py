@@ -107,21 +107,19 @@ class ModalDeploymentNode(io.ComfyNode):
                     optional=True,
                 ),
                 io.Boolean.Input(
-                    "force_rebuild",
-                    display_name="Force Modal Rebuild",
+                    "rebuild_modal_app",
+                    display_name="Rebuild Modal App",
                     default=False,
                     tooltip=(
-                        "Embed a build nonce so Modal rebuilds the remote image even when sources look cached."
+                        "Embed a build nonce and deploy with MODAL_IGNORE_CACHE=1 so the remote image rebuilds even when sources look cached."
                     ),
                     optional=True,
                 ),
                 io.Boolean.Input(
-                    "delete_remote_app",
-                    display_name="Delete Remote App",
+                    "delete_modal_app",
+                    display_name="Delete Modal App",
                     default=False,
-                    tooltip=(
-                        "Call `modal app delete` before deployment so the remote app and image are removed."
-                    ),
+                    tooltip="Call `modal app stop` before deployment so the previous remote app is torn down.",
                     optional=True,
                 ),
             ],
@@ -151,8 +149,8 @@ class ModalDeploymentNode(io.ComfyNode):
         deploy: bool = True,
         dry_run: bool = False,
         clean_build: bool = False,
-        force_rebuild: bool = False,
-        delete_remote_app: bool = False,
+        rebuild_modal_app: bool = False,
+        delete_modal_app: bool = False,
     ) -> io.NodeOutput:
         app_name = app_name or DEFAULT_APP_NAME
 
@@ -168,7 +166,7 @@ class ModalDeploymentNode(io.ComfyNode):
 
         await execution_api.set_progress(0.05, 1.0, node_id=cls.hidden.unique_id)
         cls._send_ui_update("Preparing Modal project scaffold...")
-        build_nonce: str | None = uuid.uuid4().hex if force_rebuild else None
+        build_nonce: str | None = uuid.uuid4().hex if rebuild_modal_app else None
 
         project_paths = cls._prepare_modal_project(
             workflow_file=workflow_file,
@@ -198,13 +196,13 @@ class ModalDeploymentNode(io.ComfyNode):
         cls._send_ui_update(
             "Running modal deploy – this can take a few minutes while dependencies install..."
         )
-        if delete_remote_app:
+        if delete_modal_app:
             cls._send_ui_update(f"Stopping Modal app '{app_name}' before redeployment...")
             await cls._stop_modal_app(app_name)
 
         service_url = await cls._run_modal_deploy(
             project_paths.workflow,
-            force_rebuild=bool(force_rebuild),
+            force_rebuild=bool(rebuild_modal_app),
         )
         await execution_api.set_progress(1.0, 1.0, node_id=cls.hidden.unique_id)
         cls._send_ui_update(f"Modal deployment completed: {service_url}")
@@ -232,9 +230,9 @@ class ModalDeploymentNode(io.ComfyNode):
         config_path = target_root / "modal_config.json"
         workflow_py = target_root / "workflow.py"
 
-        prompt_payload = workflow_file.read_text()
-        shutil.copyfile(workflow_file, prompt_path)
-        logger.debug("Copied workflow JSON to %s", prompt_path)
+        prompt_payload = cls._load_and_validate_workflow(workflow_file)
+        prompt_path.write_text(json.dumps(prompt_payload, indent=2))
+        logger.debug("Wrote normalized workflow JSON to %s", prompt_path)
 
         config_payload = {
             "app_name": app_name,
@@ -255,7 +253,7 @@ class ModalDeploymentNode(io.ComfyNode):
                 system_packages=system_packages,
                 gpu_type=gpu_type,
                 build_nonce=build_nonce,
-                prompt_literal=prompt_payload,
+                prompt_literal=json.dumps(prompt_payload),
             )
         )
         logger.debug("Generated workflow.py template at %s", workflow_py)
@@ -313,9 +311,36 @@ class ModalDeploymentNode(io.ComfyNode):
             "SYSTEM_PACKAGES": repr(system_packages or []),
             "GPU_LITERAL": repr(gpu_type),
             "BUILD_NONCE": repr(build_nonce),
-            "PROMPT_JSON_LITERAL": json.dumps(prompt_literal),
+            "PROMPT_JSON_LITERAL": prompt_literal,
         }
         return template.substitute(substitutions)
+
+    @staticmethod
+    def _load_and_validate_workflow(workflow_file: Path) -> dict:
+        try:
+            payload = json.loads(workflow_file.read_text())
+        except json.JSONDecodeError as exc:
+            raise ModalDeploymentError(
+                f"Workflow file '{workflow_file}' is not valid JSON: {exc}"
+            ) from exc
+
+        if not isinstance(payload, dict):
+            raise ModalDeploymentError(
+                "Workflow JSON must be an object mapping node IDs to definitions. Export the workflow using the 'Save (as JSON)' option in ComfyUI."
+            )
+
+        sample_values = list(payload.values())
+        if payload and isinstance(sample_values[0], dict) and "class_type" in sample_values[0]:
+            return payload
+
+        if "nodes" in payload and isinstance(payload["nodes"], list):
+            raise ModalDeploymentError(
+                "Workflow appears to be in graph format (contains a top-level 'nodes' array). Use ComfyUI's 'Save (as JSON)' to export the simplified prompt before running Modal Deployment."
+            )
+
+        raise ModalDeploymentError(
+            "Workflow JSON is missing 'class_type' entries; ensure you exported the prompt from ComfyUI using the standard JSON save option."
+        )
 
     @staticmethod
     def _write_utils_shim(target_root: Path) -> None:
