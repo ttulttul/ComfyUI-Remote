@@ -48,6 +48,7 @@ class ModalDeploymentTest(unittest.TestCase):
                 pip_packages=["numpy"],
                 system_packages=["libgl1"],
                 gpu_type="A10G",
+                clean_build=False,
             )
 
             self.assertTrue(project.prompt.exists())
@@ -91,10 +92,43 @@ class ModalDeploymentTest(unittest.TestCase):
                 pip_packages=[],
                 system_packages=[],
                 gpu_type=None,
+                clean_build=False,
             )
 
             config = json.loads(project.config.read_text())
             self.assertEqual(config["gpu_type"], "H100")
+
+    def test_clean_build_removes_existing_directory(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmpdir_path = Path(tmpdir)
+            workflow_path = tmpdir_path / "workflow.json"
+            workflow_path.write_text(json.dumps({"nodes": []}))
+
+            initial = ModalDeploymentNode._prepare_modal_project(
+                workflow_file=workflow_path,
+                app_name="clean-me",
+                working_directory=tmpdir,
+                pip_packages=[],
+                system_packages=[],
+                gpu_type=None,
+                clean_build=False,
+            )
+
+            stale_file = initial.root / "stale.txt"
+            stale_file.write_text("keep me?")
+            self.assertTrue(stale_file.exists())
+
+            rebuilt = ModalDeploymentNode._prepare_modal_project(
+                workflow_file=workflow_path,
+                app_name="clean-me",
+                working_directory=tmpdir,
+                pip_packages=[],
+                system_packages=[],
+                gpu_type=None,
+                clean_build=True,
+            )
+
+            self.assertFalse((rebuilt.root / "stale.txt").exists())
 
 
 if __name__ == "__main__":

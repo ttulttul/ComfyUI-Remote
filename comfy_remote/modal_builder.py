@@ -97,6 +97,13 @@ class ModalDeploymentNode(io.ComfyNode):
                     tooltip="Skip modal CLI invocation and return an illustrative service URL.",
                     optional=True,
                 ),
+                io.Boolean.Input(
+                    "clean_build",
+                    display_name="Clean Build",
+                    default=False,
+                    tooltip="Delete the existing Modal build directory before regenerating project files.",
+                    optional=True,
+                ),
             ],
             outputs=[
                 io.String.Output(
@@ -123,6 +130,7 @@ class ModalDeploymentNode(io.ComfyNode):
         gpu_type: str | None = None,
         deploy: bool = True,
         dry_run: bool = False,
+        clean_build: bool = False,
     ) -> io.NodeOutput:
         app_name = app_name or DEFAULT_APP_NAME
 
@@ -145,6 +153,7 @@ class ModalDeploymentNode(io.ComfyNode):
             pip_packages=pip_packages,
             system_packages=system_packages,
             gpu_type=gpu_choice,
+            clean_build=bool(clean_build),
         )
 
         await execution_api.set_progress(0.25, 1.0, node_id=cls.hidden.unique_id)
@@ -178,8 +187,12 @@ class ModalDeploymentNode(io.ComfyNode):
         pip_packages: list[str],
         system_packages: list[str],
         gpu_type: str | None,
+        clean_build: bool,
     ) -> ModalProjectPaths:
         target_root = cls._resolve_target_directory(workflow_file, working_directory, app_name)
+        if clean_build and target_root.exists():
+            logger.info("Removing existing Modal project directory %s", target_root)
+            shutil.rmtree(target_root)
         target_root.mkdir(parents=True, exist_ok=True)
 
         prompt_path = target_root / "prompt.json"
