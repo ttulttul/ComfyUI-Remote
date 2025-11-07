@@ -159,12 +159,15 @@ class ModalDeploymentTest(unittest.TestCase):
             self.assertIn(f"BUILD_NONCE = '{nonce}'", workflow_source)
             self.assertIn("Modal build nonce activated", workflow_source)
 
-    def test_build_modal_delete_command(self):
-        forced = ModalDeploymentNode._build_modal_delete_command("demo", True)
-        self.assertEqual(forced, ["modal", "app", "delete", "--force", "demo"])
+    def test_modal_helper_builders(self):
+        stop_command = ModalDeploymentNode._build_modal_stop_command("demo")
+        self.assertEqual(stop_command, ["modal", "app", "stop", "demo"])
 
-        plain = ModalDeploymentNode._build_modal_delete_command("demo", False)
-        self.assertEqual(plain, ["modal", "app", "delete", "demo"])
+        env_default = ModalDeploymentNode._build_modal_deploy_env(False)
+        self.assertEqual(env_default, {})
+
+        env_forced = ModalDeploymentNode._build_modal_deploy_env(True)
+        self.assertEqual(env_forced, {"MODAL_IGNORE_CACHE": "1"})
 
 
 if __name__ == "__main__":

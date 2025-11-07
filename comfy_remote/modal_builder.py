@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 import re
 import shutil
 import uuid
@@ -200,10 +201,13 @@ class ModalDeploymentNode(io.ComfyNode):
         if delete_remote_app:
             await cls._delete_modal_app(app_name)
         if delete_remote_app:
-            cls._send_ui_update(f"Deleting Modal app '{app_name}' before redeployment...")
-            await cls._delete_modal_app(app_name)
+            cls._send_ui_update(f"Stopping Modal app '{app_name}' before redeployment...")
+            await cls._stop_modal_app(app_name)
 
-        service_url = await cls._run_modal_deploy(project_paths.workflow)
+        service_url = await cls._run_modal_deploy(
+            project_paths.workflow,
+            force_rebuild=bool(force_rebuild),
+        )
         await execution_api.set_progress(1.0, 1.0, node_id=cls.hidden.unique_id)
         cls._send_ui_update(f"Modal deployment completed: {service_url}")
         return io.NodeOutput(service_url)
@@ -310,10 +314,11 @@ class ModalDeploymentNode(io.ComfyNode):
         return template.substitute(substitutions)
 
     @classmethod
-    async def _run_modal_deploy(cls, workflow_py: Path) -> str:
+    async def _run_modal_deploy(cls, workflow_py: Path, force_rebuild: bool) -> str:
         command = ["modal", "deploy", str(workflow_py)]
+        env_overrides = cls._build_modal_deploy_env(force_rebuild)
         logger.info("Running Modal deploy: %s", " ".join(command))
-        returncode, stdout, stderr = await cls._execute_modal_command(command)
+        returncode, stdout, stderr = await cls._execute_modal_command(command, env_overrides)
 
         if returncode != 0:
             logger.error("Modal deploy failed with code %s: %s", returncode, stderr)
@@ -332,34 +337,37 @@ class ModalDeploymentNode(io.ComfyNode):
         return service_url
 
     @classmethod
-    async def _delete_modal_app(cls, app_name: str) -> None:
-        attempts = [(True, "with --force"), (False, "without --force")]
-        for use_force, label in attempts:
-            command = cls._build_modal_delete_command(app_name, use_force)
-            logger.info("Deleting Modal app (%s): %s", label, " ".join(command))
-            returncode, stdout, stderr = await cls._execute_modal_command(command)
-            if returncode == 0:
-                logger.info("Modal app %s deleted", app_name)
-                return
+    async def _stop_modal_app(cls, app_name: str) -> None:
+        command = cls._build_modal_stop_command(app_name)
+        logger.info("Stopping Modal app: %s", " ".join(command))
+        returncode, stdout, stderr = await cls._execute_modal_command(command)
+        if returncode == 0:
+            logger.info("Modal app %s stopped", app_name)
+            return
 
-            combined = stderr.strip() or stdout.strip()
-            lowered = combined.lower()
-            if use_force and "no such option" in lowered:
-                logger.warning("Modal CLI does not support --force; retrying without it")
-                continue
-            if "not found" in lowered:
-                logger.info("Modal app %s not found remotely; proceeding", app_name)
-                return
-            raise ModalDeploymentError(
-                f"Modal app delete failed with exit code {returncode}: {combined or 'No output provided.'}"
-            )
+        combined = stderr.strip() or stdout.strip()
+        lowered = combined.lower()
+        if "not found" in lowered or "no app" in lowered:
+            logger.info("Modal app %s was not running; continuing", app_name)
+            return
+        raise ModalDeploymentError(
+            f"Modal app stop failed with exit code {returncode}: {combined or 'No output provided.'}"
+        )
 
     @classmethod
-    async def _execute_modal_command(cls, command: list[str]) -> tuple[int, str, str]:
+    async def _execute_modal_command(
+        cls,
+        command: list[str],
+        env_overrides: dict[str, str] | None = None,
+    ) -> tuple[int, str, str]:
+        env = os.environ.copy()
+        if env_overrides:
+            env.update(env_overrides)
         process = await asyncio.create_subprocess_exec(
             *command,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
+            env=env,
         )
 
         stdout_task = asyncio.create_task(
@@ -375,12 +383,14 @@ class ModalDeploymentNode(io.ComfyNode):
         return returncode, stdout, stderr
 
     @staticmethod
-    def _build_modal_delete_command(app_name: str, use_force: bool) -> list[str]:
-        command = ["modal", "app", "delete"]
-        if use_force:
-            command.append("--force")
-        command.append(app_name)
-        return command
+    def _build_modal_stop_command(app_name: str) -> list[str]:
+        return ["modal", "app", "stop", app_name]
+
+    @staticmethod
+    def _build_modal_deploy_env(force_rebuild: bool) -> dict[str, str]:
+        if force_rebuild:
+            return {"MODAL_IGNORE_CACHE": "1"}
+        return {}
 
     @classmethod
     def _send_ui_update(cls, message: str) -> None:
