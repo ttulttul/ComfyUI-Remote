@@ -38,7 +38,9 @@ CUDA_WHEEL_INDEX = "https://download.pytorch.org/whl/cu121"
 CPU_WHEEL_INDEX = "https://download.pytorch.org/whl/cpu"
 XFORMERS_VERSION = "0.0.26.post1"
 
-PROJECT_ROOT = Path(__file__).parent
+LOCAL_PROJECT_ROOT = Path(__file__).parent
+REMOTE_PROJECT_ROOT = Path("/project")
+PROJECT_ROOT = REMOTE_PROJECT_ROOT
 PROMPT_PATH = PROJECT_ROOT / "prompt.json"
 COMFY_ROOT = Path("/workspace/ComfyUI")
 
@@ -141,6 +143,11 @@ if GPU_TYPE:
         f"{CUDA_WHEEL_INDEX} xformers=={XFORMERS_VERSION}"
     )
 
+PROJECT_MOUNT = modal.Mount.from_local_dir(
+    LOCAL_PROJECT_ROOT,
+    remote_path=REMOTE_PROJECT_ROOT,
+)
+
 image = (
     modal.Image.debian_slim(python_version="3.11")
     .apt_install(*SYSTEM_PACKAGES)
@@ -152,7 +159,12 @@ if EXTRA_PIP_PACKAGES:
 
 image = image.env({"PYTHONPATH": "/workspace/ComfyUI"})
 
-function_kwargs: Dict[str, Any] = {"image": image, "min_containers": 1, "timeout": 900}
+function_kwargs: Dict[str, Any] = {
+    "image": image,
+    "min_containers": 1,
+    "timeout": 900,
+    "mounts": [PROJECT_MOUNT],
+}
 
 if GPU_TYPE:
     function_kwargs["gpu"] = str(GPU_TYPE)
