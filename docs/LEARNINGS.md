@@ -11,3 +11,4 @@
 - Modal deployments also purge any preloaded PyPI `utils` module before initialising ComfyUI so that `utils.install_util` resolves to the repo’s helper package, preventing the `No module named 'utils.install_util'; 'utils' is not a package` error.
 - Added a `Clean Build` switch to the Modal Deployment node so we can remove stale project directories (and Modal CLI state) before regenerating the scaffold when a previous deployment needs to be blown away.
 - Added a `Force Modal Rebuild` option that injects a build nonce into the generated Modal project and runs `modal deploy` with `MODAL_IGNORE_CACHE=1`, plus a `Delete Remote App` toggle that shells out to `modal app stop <app>` so we can terminate the remote deployment before redeploying.
+- `pip uninstall -y utils || true` is baked into the Modal image build so stray PyPI `utils` packages can’t shadow ComfyUI’s `utils.install_util` at runtime.

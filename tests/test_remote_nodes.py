@@ -67,6 +67,7 @@ class ModalDeploymentTest(unittest.TestCase):
             self.assertIn("PROMPT_PATH", workflow_source)
             self.assertIn("import os", workflow_source)
             self.assertIn('pip install fastapi', workflow_source)
+            self.assertIn('pip uninstall -y utils || true', workflow_source)
             self.assertIn('_ensure_comfy_module_resolution()', workflow_source)
             self.assertIn('TORCH_INSTALL_COMMAND = (', workflow_source)
             self.assertIn('f"{TORCH_INDEX_URL} torch=={TORCH_VERSION} torchvision=={TORCHVISION_VERSION} torchaudio=={TORCHAUDIO_VERSION}"', workflow_source)

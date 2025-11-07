@@ -97,6 +97,7 @@ TORCH_INSTALL_COMMAND = (
 base_commands = [
     "pip install --upgrade pip",
     "pip install --upgrade setuptools wheel",
+    "pip uninstall -y utils || true",
     "test -d /workspace/ComfyUI || git clone --depth=1 https://github.com/comfyanonymous/ComfyUI.git /workspace/ComfyUI",
     "cd /workspace/ComfyUI && pip install -r requirements.txt",
     TORCH_INSTALL_COMMAND,
