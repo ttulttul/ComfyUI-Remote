@@ -340,6 +340,7 @@ if spec is None or spec.loader is None:
 module = importlib.util.module_from_spec(spec)
 sys.modules[__name__] = module
 spec.loader.exec_module(module)
+print("[Comfy utils shim] Loaded utils module from", module.__file__)
 """
         shim_path.write_text(shim_source)
 

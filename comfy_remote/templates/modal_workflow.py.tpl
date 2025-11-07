@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import importlib
 import importlib.util
 import json
 import logging
@@ -44,6 +45,12 @@ COMFY_ROOT = Path("/workspace/ComfyUI")
 
 def _ensure_comfy_module_resolution() -> None:
     """Guarantee that ComfyUI's bundled packages shadow similarly named PyPI modules."""
+
+    try:
+        import utils as utils_before  # type: ignore
+        logger.debug("Pre-cleanup utils module path: %s", getattr(utils_before, "__file__", "<unknown>"))
+    except Exception:
+        logger.debug("Pre-cleanup utils module not found")
 
     comfy_path = str(COMFY_ROOT)
     if comfy_path not in sys.path:
@@ -86,6 +93,16 @@ def _ensure_comfy_module_resolution() -> None:
             module = importlib.util.module_from_spec(spec)
             sys.modules["utils"] = module
             spec.loader.exec_module(module)
+            logger.info(
+                "Comfy utils module reloaded from %s",
+                getattr(module, "__file__", str(comfy_utils_init)),
+            )
+
+    try:
+        import utils as utils_after  # type: ignore
+        logger.info("Post-cleanup utils module path: %s", getattr(utils_after, "__file__", "<unknown>"))
+    except Exception:
+        logger.warning("Utils module import still failing after cleanup")
 
 
 _ensure_comfy_module_resolution()
