@@ -442,4 +442,9 @@ def _load_prompt_payload() -> Dict[str, Any]:
             return json.loads(PROMPT_PATH.read_text())
         except Exception as exc:
             logger.warning("Failed to read prompt.json (%s); using embedded payload", exc)
+    logger.info(
+        "Loading embedded prompt payload (type=%s, length=%s)",
+        type(PROMPT_JSON_LITERAL).__name__,
+        len(PROMPT_JSON_LITERAL) if isinstance(PROMPT_JSON_LITERAL, (str, bytes)) else "n/a",
+    )
     return json.loads(PROMPT_JSON_LITERAL)
